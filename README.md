@@ -94,9 +94,8 @@ correlations of the processed data.
 
 Local SHAP and LIME plots of individual alerts are produced by `scripts/interview_stimuli.py`. The
 two interview alerts (XGBoost on CIC-IDS2017) are pinned to test rows 59216 (DoS/DDoS) and 55480
-(Brute Force), both correctly classified with a predicted probability above 0.99999. The alert cards
-shown in the interviews are mock-ups; their metadata and confidence values (0.98 for DoS/DDoS,
-0.95 for Brute Force) are illustrative.
+(Brute Force), both correctly classified. The alert cards shown in the interviews are mock-ups; 
+their metadata and confidence values (0.98 for DoS/DDoS, 0.95 for Brute Force) are illustrative.
 
 ## Where the thesis results come from
 
