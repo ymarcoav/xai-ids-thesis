@@ -1,0 +1,36 @@
+[project]
+name = "xai-master-thesis"
+version = "0.1.0"
+description = "Explainable AI experiments for intrusion detection datasets."
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "joblib",
+    "lime",
+    "matplotlib",
+    "numpy",
+    "pandas",
+    "pyyaml",
+    "scikit-learn>=1.1",
+    "seaborn",
+    "shap",
+    "torch",
+    "xgboost",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest",
+    "ruff",
+]
+
+[tool.ruff]
+line-length = 100
+src = ["src", "scripts", "tests"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
+# The default Windows temp base (%TEMP%\pytest-of-<user>) can end up with a
+# locked ACL from a stale run; use a project-local temp root instead.
+addopts = "--basetemp=.pytest_tmp"

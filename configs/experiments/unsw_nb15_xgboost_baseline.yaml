@@ -1,0 +1,21 @@
+name: unsw_nb15_xgboost_baseline
+dataset: unsw_nb15
+model: xgboost
+random_state: 42
+preprocessing:
+  strategy: default_tabular
+metrics:
+- accuracy
+- precision_macro
+- recall_macro
+- f1_macro
+- roc_auc_macro
+- pr_auc_macro
+model_params:
+  subsample: 1.0
+  reg_lambda: 0.5
+  n_estimators: 200
+  min_child_weight: 5
+  max_depth: 10
+  learning_rate: 0.01
+  colsample_bytree: 0.6

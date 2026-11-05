@@ -1,0 +1,31 @@
+name: unsw_nb15
+raw_path: data/raw/UNSW_NB15
+processed_path: data/processed/unsw_nb15
+# Multiclass target: the native attack category (nine attack classes plus Benign).
+label_column: attack_cat
+
+# Column descriptions, not traffic data; skipped by scripts/inspect_datasets.py.
+exclude_files:
+  - NUSW-NB15_features.csv
+
+categorical_columns:
+  - proto
+  - state
+
+# srcip, sport, dstip, dsport: connection identifiers (metadata, prone to shortcut learning).
+# ltime, stime: absolute capture timestamps (artifacts of the capture schedule).
+# service: proxy for the destination port (D'hooge et al. 2022).
+# label: native binary label (attack_cat is the target).
+drop_columns:
+  - srcip
+  - sport
+  - dstip
+  - dsport
+  - ltime
+  - stime
+  - service
+  - label
+
+# The constant / near-duplicate screen (scripts/feature_screen.py) removes nothing: no column is
+# constant, and the closest pair, swin/dwin, still differs in 2,540 records.
+screen_drop_columns: []

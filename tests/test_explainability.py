@@ -1,0 +1,342 @@
+import numpy as np
+import pandas as pd
+import pytest
+from sklearn.pipeline import Pipeline
+from sklearn.svm import LinearSVC
+
+from xai_thesis.explainability import (
+    _build_lime_explanation,
+    _whiskers_clipped_at_zero,
+    clean_feature_names,
+    compute_permutation_importance,
+    compute_shap_values,
+    explain_instance_with_lime,
+    plot_shap_bar,
+    plot_shap_waterfall,
+    predict_proba_fn,
+    select_curated_instances,
+)
+from xai_thesis.models import build_model
+from xai_thesis.preprocessing import build_preprocessing_pipeline
+
+
+def _make_dataset(n_per_class: int = 40, random_state: int = 42, n_classes: int = 3):
+    rng = np.random.default_rng(random_state)
+    frames = []
+    for class_index in range(n_classes):
+        center = class_index * 3.0
+        frames.append(
+            pd.DataFrame(
+                {
+                    "feature_a": rng.normal(center, 1.0, n_per_class),
+                    "feature_b": rng.normal(-center, 1.0, n_per_class),
+                    "label": [f"class_{class_index}"] * n_per_class,
+                }
+            )
+        )
+    data = pd.concat(frames, ignore_index=True)
+    x = data[["feature_a", "feature_b"]]
+    y = data["label"]
+    return x, y
+
+
+def _fitted_pipeline(model_name: str, x, y, random_state: int = 42, categorical_columns=()) -> Pipeline:
+    preprocessing = build_preprocessing_pipeline(x, categorical_columns=categorical_columns)
+    model = build_model(model_name, random_state=random_state)
+    pipeline = Pipeline(steps=[("preprocessing", preprocessing), ("model", model)])
+    pipeline.fit(x, y)
+    return pipeline
+
+
+def _fitted_pipeline_without_predict_proba(x, y, random_state: int = 42) -> Pipeline:
+    # A classifier without predict_proba, to test the softmax(decision_function) fallback.
+    preprocessing = build_preprocessing_pipeline(x, categorical_columns=[])
+    model = LinearSVC(random_state=random_state, class_weight="balanced")
+    pipeline = Pipeline(steps=[("preprocessing", preprocessing), ("model", model)])
+    pipeline.fit(x, y)
+    return pipeline
+
+
+def _make_dataset_with_categorical(n_per_class: int = 40, random_state: int = 42, n_classes: int = 3):
+    x, y = _make_dataset(n_per_class, random_state, n_classes=n_classes)
+    rng = np.random.default_rng(random_state)
+    x = x.copy()
+    x["protocol"] = rng.choice(["tcp", "udp"], size=len(x))
+    return x, y
+
+
+def test_clean_feature_names_strips_column_transformer_prefix() -> None:
+    assert clean_feature_names(["numeric__dur", "categorical__proto_tcp", "no_prefix"]) == [
+        "dur",
+        "proto_tcp",
+        "no_prefix",
+    ]
+
+
+def test_predict_proba_fn_uses_native_predict_proba_when_available() -> None:
+    x, y = _make_dataset()
+    pipeline = _fitted_pipeline("random_forest", x, y)
+    model = pipeline.named_steps["model"]
+
+    fn = predict_proba_fn(model)
+
+    assert fn == model.predict_proba
+
+
+def test_predict_proba_fn_softmax_fallback_preserves_argmax_for_margin_only_classifier() -> None:
+    x, y = _make_dataset()
+    pipeline = _fitted_pipeline_without_predict_proba(x, y)
+    model = pipeline.named_steps["model"]
+    x_transformed = pipeline.named_steps["preprocessing"].transform(x)
+
+    fn = predict_proba_fn(model)
+    proba = fn(x_transformed)
+
+    assert proba.shape == (len(x), 3)
+    assert np.allclose(proba.sum(axis=1), 1.0)
+    proxy_predictions = model.classes_[proba.argmax(axis=1)]
+    assert (proxy_predictions == model.predict(x_transformed)).all()
+
+
+@pytest.mark.parametrize("model_name", ["random_forest", "neural_network"])
+def test_compute_shap_values_has_consistent_shape_across_model_types(model_name: str) -> None:
+    x, y = _make_dataset()
+    pipeline = _fitted_pipeline(model_name, x, y)
+
+    shap_values, base_values, x_transformed, feature_names = compute_shap_values(
+        pipeline, model_name, x.iloc[:10], x.iloc[10:30]
+    )
+
+    assert shap_values.shape == (10, 2, 3)
+    assert base_values.shape == (10, 3)
+    assert x_transformed.shape[0] == 10
+    assert feature_names == ["feature_a", "feature_b"]
+
+
+def test_compute_shap_values_collapses_one_hot_columns_and_restores_original_values() -> None:
+    x, y = _make_dataset_with_categorical()
+    pipeline = _fitted_pipeline("random_forest", x, y, categorical_columns=["protocol"])
+
+    shap_values, _, display_data, feature_names = compute_shap_values(
+        pipeline, "random_forest", x.iloc[:10], x.iloc[10:30], categorical_columns=["protocol"]
+    )
+
+    # One-hot expansion of "protocol" (2 categories) must be collapsed back to a single
+    # feature, not left as two ("protocol_tcp", "protocol_udp") separate attributions.
+    assert feature_names == ["feature_a", "feature_b", "protocol"]
+    assert shap_values.shape == (10, 3, 3)
+
+    # display_data must carry the original, untransformed values - not the quantile-scaled
+    # numeric representation, and not a one-hot 0/1 indicator for the categorical column.
+    assert np.allclose(display_data[:, 0].astype(float), x["feature_a"].iloc[:10].to_numpy())
+    assert list(display_data[:, 2]) == list(x["protocol"].iloc[:10])
+
+
+def test_compute_shap_values_expands_binary_classifier_to_per_class_shape() -> None:
+    # For a binary problem, TreeExplainer returns a single log-odds column for XGBoost; the
+    # result must still have one column per class. (The random forest's output is already per
+    # class, so it does not exercise this path.)
+    model_name = "xgboost"
+    x, y = _make_dataset(n_classes=2)
+    pipeline = _fitted_pipeline(model_name, x, y)
+
+    shap_values, base_values, _, feature_names = compute_shap_values(
+        pipeline, model_name, x.iloc[:10], x.iloc[10:30]
+    )
+
+    assert shap_values.shape == (10, 2, 2)
+    assert base_values.shape == (10, 2)
+    assert feature_names == ["feature_a", "feature_b"]
+    # class 0's contribution must be exactly the negation of class 1's, per the binary SHAP
+    # convention this project verified empirically against the model's own predict_proba.
+    assert np.allclose(shap_values[:, :, 0], -shap_values[:, :, 1])
+    assert np.allclose(base_values[:, 0], -base_values[:, 1])
+
+
+def test_plot_shap_bar_writes_png(tmp_path) -> None:
+    x, y = _make_dataset()
+    pipeline = _fitted_pipeline("random_forest", x, y)
+    shap_values, _, x_transformed, feature_names = compute_shap_values(pipeline, "random_forest", x, x.iloc[:30])
+    class_names = list(pipeline.named_steps["model"].classes_)
+
+    bar_path = plot_shap_bar(shap_values, x_transformed, feature_names, class_names, tmp_path / "bar.png")
+
+    assert bar_path.exists()
+
+
+def test_plot_shap_waterfall_writes_png(tmp_path) -> None:
+    x, y = _make_dataset()
+    pipeline = _fitted_pipeline("random_forest", x, y)
+    shap_values, base_values, x_transformed, feature_names = compute_shap_values(
+        pipeline, "random_forest", x.iloc[:5], x.iloc[5:30]
+    )
+
+    output_path = plot_shap_waterfall(
+        shap_values, base_values, x_transformed[0], feature_names, 0, 0, tmp_path / "waterfall.png"
+    )
+
+    assert output_path.exists()
+
+
+def test_explain_instance_with_lime_writes_png(tmp_path) -> None:
+    x, y = _make_dataset()
+    pipeline = _fitted_pipeline("random_forest", x, y)
+    class_names = list(pipeline.named_steps["model"].classes_)
+
+    output_path = explain_instance_with_lime(pipeline, x, x.iloc[0], class_names, tmp_path / "lime.png")
+
+    assert output_path.exists()
+
+
+def test_lime_class_index_overrides_the_naturally_top_ranked_class() -> None:
+    # x.iloc[0] is drawn from class_0's cluster (center=0), so predict_proba naturally ranks
+    # class_0 highest - the real-world case this guards is svm, where pipeline.predict() (used
+    # to pick a SHAP plot's class) and predict_proba's argmax (LIME's default top_labels=1 pick)
+    # can disagree, so a same-instance SHAP/LIME pair need an explicit override to agree on which
+    # class both explain. class_index=2 forces LIME to explain the third class ("class_2")
+    # instead, proving the override actually overrides rather than being silently ignored.
+    x, y = _make_dataset()
+    pipeline = _fitted_pipeline("random_forest", x, y)
+    class_names = list(pipeline.named_steps["model"].classes_)
+    natural_top_class = class_names[int(np.argmax(pipeline.predict_proba(x.iloc[[0]])[0]))]
+    assert natural_top_class == "class_0"
+
+    explanation, label, _columns = _build_lime_explanation(pipeline, x, x.iloc[0], class_names, class_index=2)
+
+    assert label == 2
+    assert explanation.available_labels() == [2]
+
+
+def test_explain_instance_with_lime_works_without_predict_proba(tmp_path) -> None:
+    x, y = _make_dataset()
+    pipeline = _fitted_pipeline_without_predict_proba(x, y)
+    assert not hasattr(pipeline.named_steps["model"], "predict_proba")
+    class_names = list(pipeline.named_steps["model"].classes_)
+
+    output_path = explain_instance_with_lime(pipeline, x, x.iloc[0], class_names, tmp_path / "lime_no_proba.png")
+
+    assert output_path.exists()
+
+
+def test_explain_instance_with_lime_handles_zero_variance_column(tmp_path) -> None:
+    # A column that's exactly constant across all of x_train crashes LIME's internal
+    # truncnorm perturbation sampling ("scale must be positive") unless excluded - this
+    # happens for real on CIC-IDS2017, which has several exactly-constant columns.
+    x, y = _make_dataset()
+    x = x.copy()
+    x["constant_feature"] = 1.0
+    preprocessing = build_preprocessing_pipeline(x, categorical_columns=[])
+    model = build_model("random_forest", random_state=42)
+    pipeline = Pipeline(steps=[("preprocessing", preprocessing), ("model", model)])
+    pipeline.fit(x, y)
+    class_names = list(pipeline.named_steps["model"].classes_)
+
+    output_path = explain_instance_with_lime(pipeline, x, x.iloc[0], class_names, tmp_path / "lime_constant.png")
+
+    assert output_path.exists()
+
+
+def test_explain_instance_with_lime_works_with_discretize_continuous(tmp_path) -> None:
+    x, y = _make_dataset_with_categorical()
+    pipeline = _fitted_pipeline("random_forest", x, y, categorical_columns=["protocol"])
+    class_names = list(pipeline.named_steps["model"].classes_)
+
+    output_path = explain_instance_with_lime(
+        pipeline,
+        x,
+        x.iloc[0],
+        class_names,
+        tmp_path / "lime_discretized.png",
+        categorical_columns=["protocol"],
+        discretize_continuous=True,
+    )
+
+    assert output_path.exists()
+
+
+def test_explain_instance_with_lime_discretizes_despite_missing_values(tmp_path) -> None:
+    # A NaN in a continuous training column makes LIME's per-bin std NaN and breaks its
+    # truncnorm sampling ("scale must be positive"), as CIC-IDS2017's Flow Bytes/s and Flow
+    # Packets/s would without the median fill in _build_lime_explainer. The explained row
+    # carries a NaN too, as CIC-IDS2017 test rows can.
+    x, y = _make_dataset()
+    x = x.copy()
+    x.loc[x.index[:5], "feature_a"] = np.nan
+    pipeline = _fitted_pipeline("random_forest", x, y)
+    class_names = list(pipeline.named_steps["model"].classes_)
+
+    output_path = explain_instance_with_lime(
+        pipeline, x, x.iloc[0], class_names, tmp_path / "lime_missing.png", discretize_continuous=True
+    )
+
+    assert output_path.exists()
+
+
+def test_compute_permutation_importance_writes_png_and_ranks_features(tmp_path) -> None:
+    x, y = _make_dataset()
+    pipeline = _fitted_pipeline("random_forest", x, y)
+
+    output_path, top_features, result = compute_permutation_importance(
+        pipeline, x, y, tmp_path / "pfi.png", n_repeats=3
+    )
+
+    assert output_path.exists()
+    assert set(top_features) == {"feature_a", "feature_b"}
+    # The raw Bunch comes back too, so callers needing the ranking don't recompute it.
+    assert result.importances_mean.shape == (x.shape[1],)
+    assert result.importances.shape == (x.shape[1], 3)
+
+
+def test_whiskers_clipped_at_zero_stop_at_the_bar_origin() -> None:
+    means = np.array([0.05, 0.002, 0.0, -0.001, -0.04])
+    stds = np.array([0.01, 0.01, 0.01, 0.01, 0.01])
+
+    lower, upper = _whiskers_clipped_at_zero(means, stds)
+
+    # A whisker shrinks only where a full standard deviation would cross zero.
+    np.testing.assert_allclose(lower, [0.01, 0.002, 0.0, 0.01, 0.01])
+    np.testing.assert_allclose(upper, [0.01, 0.01, 0.0, 0.001, 0.01])
+
+
+def test_select_curated_instances_finds_correct_and_misclassified() -> None:
+    x, y = _make_dataset()
+    pipeline = _fitted_pipeline("random_forest", x, y)
+
+    instances = select_curated_instances(pipeline, x, y, "class_0", "class_1", random_state=42)
+
+    assert "correct" in instances
+    assert y.loc[instances["correct"]] == "class_0"
+    assert pipeline.predict(x.loc[[instances["correct"]]])[0] == "class_0"
+
+
+def test_select_curated_instances_uses_pinned_correct_index() -> None:
+    x, y = _make_dataset()
+    pipeline = _fitted_pipeline("random_forest", x, y)
+    drawn = select_curated_instances(pipeline, x, y, "class_0", "class_1", random_state=42)
+    predictions = pipeline.predict(x)
+    pinned_row = next(
+        i for i in x.index[(y == "class_0") & (predictions == "class_0")] if i != drawn["correct"]
+    )
+
+    instances = select_curated_instances(
+        pipeline, x, y, "class_0", "class_1", random_state=42, correct_index=pinned_row
+    )
+
+    assert instances["correct"] == pinned_row
+    # Pinning the correct instance leaves the misclassified draw unchanged.
+    assert instances.get("misclassified") == drawn.get("misclassified")
+
+    wrong_row = x.index[y == "class_2"][0]
+    with pytest.raises(ValueError):
+        select_curated_instances(pipeline, x, y, "class_0", "class_1", random_state=42, correct_index=wrong_row)
+
+
+def test_select_curated_instances_returns_empty_when_no_misclassifications_exist() -> None:
+    x, y = _make_dataset()
+    pipeline = _fitted_pipeline("random_forest", x, y)
+
+    # class_0 and class_2 are far apart (centers 0 and 6) so a well-separated model
+    # should never confuse them; the "misclassified" key should simply be absent.
+    instances = select_curated_instances(pipeline, x, y, "class_0", "class_2", random_state=42)
+
+    assert "misclassified" not in instances

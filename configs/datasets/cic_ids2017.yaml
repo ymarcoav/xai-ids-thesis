@@ -1,0 +1,44 @@
+name: cic_ids2017
+raw_path: data/raw/CIC_IDS2017
+processed_path: data/processed/cic_ids2017
+# Multiclass target: native labels consolidated into seven classes (see datasets/cic_ids2017.py).
+label_column: Label
+
+# CICFlowMeter features are all numeric.
+categorical_columns: []
+
+# Each attack scenario of the testbed targets a fixed service, so the destination port encodes
+# the capture configuration rather than traffic behavior (D'hooge et al. 2022).
+drop_columns:
+  - Destination Port
+
+# Removed by the constant / near-duplicate screen; scripts/feature_screen.py reruns the screen and
+# checks it against this list.
+#   Constant (always 0): Bwd PSH Flags, Bwd URG Flags and the six *Bulk* columns.
+#   Near-duplicates, each repeating a retained column in all but at most 20 records:
+#     Subflow Fwd/Bwd Packets   -> Total Fwd/Backward Packets
+#     Avg Fwd/Bwd Segment Size  -> Fwd/Bwd Packet Length Mean
+#     Subflow Fwd/Bwd Bytes     -> Total Length of Fwd/Bwd Packets
+#     Fwd PSH Flags             -> SYN Flag Count
+#     CWE Flag Count            -> Fwd URG Flags
+#     ECE Flag Count            -> RST Flag Count
+#   Strongly correlated columns that measure distinct quantities are kept, e.g. Flow Duration and
+#   Fwd IAT Total (r = 0.998, but different values in 77% of records).
+screen_drop_columns:
+  - Bwd PSH Flags
+  - Bwd URG Flags
+  - Fwd Avg Bytes/Bulk
+  - Fwd Avg Packets/Bulk
+  - Fwd Avg Bulk Rate
+  - Bwd Avg Bytes/Bulk
+  - Bwd Avg Packets/Bulk
+  - Bwd Avg Bulk Rate
+  - Subflow Fwd Packets
+  - Subflow Bwd Packets
+  - Avg Fwd Segment Size
+  - Avg Bwd Segment Size
+  - Subflow Fwd Bytes
+  - Subflow Bwd Bytes
+  - Fwd PSH Flags
+  - CWE Flag Count
+  - ECE Flag Count

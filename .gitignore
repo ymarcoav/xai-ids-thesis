@@ -1,0 +1,15 @@
+.venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.pytest_tmp/
+.ruff_cache/
+
+# Datasets and generated artifacts (see README: Data, Reproducing the results)
+data/raw/*
+data/processed/*
+outputs/*
+
+!data/raw/.gitkeep
+!data/processed/.gitkeep
