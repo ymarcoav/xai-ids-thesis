@@ -334,6 +334,31 @@ def generate_label_distribution(
     return plot_label_distribution(labels, output_path)
 
 
+def generate_split_distribution(
+    dataset_config_path: str | Path,
+    *,
+    metrics_dir: str | Path = "outputs/metrics",
+) -> Path:
+    """Write the per-class train, test and total counts of a processed dataset (thesis Table A.2)
+    to metrics_dir/dataset_inspection/<dataset>/label_distribution_split.csv, one row per class,
+    largest class first: class, train, test, total, share (of the total).
+    """
+    dataset_config = load_dataset_config(dataset_config_path)
+    label = dataset_config.label_column
+    processed = Path(dataset_config.processed_path)
+    counts = pd.DataFrame(
+        {split: pd.read_csv(processed / f"{split}.csv", usecols=[label])[label].value_counts() for split in ("train", "test")}
+    ).fillna(0).astype(int)
+    counts["total"] = counts["train"] + counts["test"]
+    counts["share"] = counts["total"] / counts["total"].sum()
+    counts = counts.sort_values("total", ascending=False).rename_axis("class").reset_index()
+
+    output_dir = ensure_directory(Path(metrics_dir) / "dataset_inspection" / dataset_config.name)
+    csv_path = output_dir / "label_distribution_split.csv"
+    counts.to_csv(csv_path, index=False, float_format="%.6g")
+    return csv_path
+
+
 def generate_raw_label_distribution(
     dataset_config_path: str | Path,
     *,
@@ -520,9 +545,8 @@ def _class_balanced_sample(
     with fewer rows than its even share contributes all of them).
 
     Used for the global and local explanation samples and for the SHAP background. A balanced
-    background keeps the permutation explainer's base value close to that of the tree models,
-    whose class-weighted training already gives them a near-balanced prior; a uniform random
-    background would be dominated by Benign flows.
+    background matches the class-weighted training of all four models, which gives them a
+    near-balanced prior; a uniform random background would be dominated by Benign flows.
     """
     groups = [
         features.loc[index_block].sample(n=min(total // target.nunique() or 1, len(index_block)), random_state=random_state)

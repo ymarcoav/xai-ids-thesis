@@ -1,7 +1,7 @@
 [project]
 name = "xai-master-thesis"
-version = "0.1.0"
-description = "Explainable AI experiments for intrusion detection datasets."
+version = "1.0.0"
+description = "Code for the master's thesis 'Evaluating Explainable AI Methods for Intrusion Detection Systems'."
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [

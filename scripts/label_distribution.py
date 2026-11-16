@@ -1,13 +1,19 @@
 """Plot the label class distribution for one or all datasets: over the processed train+test
-splits (label_distribution.png) and over every raw record, after label normalization
-(label_distribution_raw.png, with counts in outputs/metrics/dataset_inspection/<dataset>/)."""
+splits (label_distribution.png, with the per-split counts of thesis Table A.2 in
+label_distribution_split.csv) and over every raw record, after label normalization
+(label_distribution_raw.png and label_distribution_raw.csv, thesis Figures 3.2 and 3.3). The
+CSVs are written to outputs/metrics/dataset_inspection/<dataset>/."""
 
 from __future__ import annotations
 
 import argparse
 from pathlib import Path
 
-from xai_thesis.pipeline import generate_label_distribution, generate_raw_label_distribution
+from xai_thesis.pipeline import (
+    generate_label_distribution,
+    generate_raw_label_distribution,
+    generate_split_distribution,
+)
 
 
 def main() -> None:
@@ -30,6 +36,7 @@ def main() -> None:
 
     for config_path in config_paths:
         print(f"Wrote {generate_label_distribution(config_path)}")
+        print(f"Wrote {generate_split_distribution(config_path)}")
         for path in generate_raw_label_distribution(config_path).values():
             print(f"Wrote {path}")
 

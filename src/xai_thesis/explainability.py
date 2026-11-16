@@ -68,9 +68,10 @@ def compute_shap_values(
 
     Output space by model:
       - random_forest: TreeExplainer (tree_path_dependent, no background), probabilities.
-      - xgboost: TreeExplainer, log-odds. SHAP supports probability output for XGBoost only for
-        binary objectives, so for these multiclass models the values stay in log-odds; their
-        level is not comparable with the other models', their ranking and signs are.
+      - xgboost: TreeExplainer, raw margin (the pre-softmax score, labelled log-odds in the
+        plots and the logit scale in the thesis). SHAP supports probability output for XGBoost
+        only for binary objectives, so for these multiclass models the values stay on the margin
+        scale; their level is not comparable with the other models', their ranking and signs are.
       - svm, neural_network: permutation explainer over predict_proba, probabilities, with
         background_data as the reference distribution.
 
@@ -79,13 +80,16 @@ def compute_shap_values(
 
     Returns (shap_values, base_values, display_data, feature_names):
       - shap_values: shape (n_samples, n_original_features, n_classes), already collapsed
-      - base_values: shape (n_samples, n_classes); the tree explainer's per-class expected
-        value is broadcast across samples. It is the model's average output over the training
-        data as recorded in the trees' node weights (weighted_n_node_samples for the random
-        forest, sum_hessian for XGBoost), which include the balanced class weights - so for the
-        tree models E[f(X)] is an average over the class-weighted training data, not over the
-        raw traffic distribution. For the permutation explainer it is the average over
-        background_data.
+      - base_values: shape (n_samples, n_classes); the tree explainer's per-class base value
+        E[f(X)], broadcast across samples. TreeExplainer runs tree_path_dependent without a
+        background and derives it from statistics stored in the trees: the node weights
+        (weighted_n_node_samples, which include the balanced class weights) for the random
+        forest, where it is the average predicted probability over the class-weighted training
+        data; for XGBoost, the base score plus each tree's cover-weighted (hessian-weighted)
+        mean leaf value. The XGBoost value is therefore not the average model output on any
+        data set: for the CIC-IDS2017 DoS/DDoS class it is -0.463, whereas the mean raw score
+        over the training data is about -5.6. For the permutation explainer it is the average
+        output over background_data.
       - display_data: shape (n_samples, n_original_features), original units/categories,
         object-dtype since numeric and categorical columns are mixed
     """

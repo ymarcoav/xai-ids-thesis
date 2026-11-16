@@ -16,6 +16,7 @@ from xai_thesis.pipeline import (
     generate_label_distribution,
     generate_missing_value_summary,
     generate_roc_curves,
+    generate_split_distribution,
     generate_train_test_split_comparison,
     preprocess_dataset,
     run_experiment,
@@ -195,6 +196,21 @@ def test_generate_label_distribution_writes_png(tmp_path) -> None:
 
     assert output_path == plots_dir / "toy" / "data" / "label_distribution.png"
     assert output_path.exists()
+
+
+def test_generate_split_distribution_counts_train_and_test_per_class(tmp_path) -> None:
+    dataset_config_path, _ = _write_toy_dataset_config(tmp_path)
+
+    csv_path = generate_split_distribution(dataset_config_path, metrics_dir=tmp_path / "metrics")
+
+    assert csv_path == tmp_path / "metrics" / "dataset_inspection" / "toy" / "label_distribution_split.csv"
+    table = pd.read_csv(csv_path)
+    # train has benign x2 and attack x1, test benign x1; a class absent from a split counts 0.
+    assert table["class"].tolist() == ["benign", "attack"]
+    assert table["train"].tolist() == [2, 1]
+    assert table["test"].tolist() == [1, 0]
+    assert table["total"].tolist() == [3, 1]
+    assert table["share"].tolist() == [0.75, 0.25]
 
 
 def _write_toy_dataset_config(tmp_path) -> tuple[Path, Path]:
