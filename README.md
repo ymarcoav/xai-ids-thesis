@@ -46,14 +46,15 @@ The datasets are not included. Place the original CSV files as follows:
 
 | Dataset | Source | Files |
 | --- | --- | --- |
-| UNSW-NB15 | <https://research.unsw.edu.au/projects/unsw-nb15-dataset> | `UNSW-NB15_1.csv` to `UNSW-NB15_4.csv` and `NUSW-NB15_features.csv` in `data/raw/UNSW_NB15/` |
+| UNSW-NB15 | <https://research.unsw.edu.au/projects/unsw-nb15-dataset> | `UNSW-NB15_1.csv` to `UNSW-NB15_4.csv` in `data/raw/UNSW_NB15/` (the column description `NUSW-NB15_features.csv` is optional; the column names are built into the adapter) |
 | CIC-IDS2017 | <https://www.unb.ca/cic/datasets/ids-2017.html> (MachineLearningCVE) | the eight `*.pcap_ISCX.csv` files in `data/raw/CIC_IDS2017/` |
 
 ## Reproducing the results
 
-Run the steps in order from the repository root. Each script processes all datasets or
-configurations unless restricted with `--dataset` or `--experiment`. Generated files go to
-`data/processed/` and `outputs/`, which are not tracked.
+Run the steps in order from the repository root. Unless restricted with `--dataset` or
+`--experiment`, each script covers both datasets and all eight models; `train.py` takes one
+experiment at a time. Generated files go to `data/processed/` and `outputs/`, which are not
+tracked.
 
 ```powershell
 # 1. Cleaning, deduplication and the stratified 70/30 split (writes data/processed/)
@@ -74,7 +75,8 @@ python scripts/explain.py
 # 5. Local agreement between SHAP and LIME
 python scripts/agreement.py
 
-# 6. Report tables and the agreement figure
+# 6. Report tables and the agreement figure (stimulus_candidates.py writes the per-instance
+#    predictions that explanation_report.py reads)
 python scripts/stimulus_candidates.py
 python scripts/explanation_report.py
 python scripts/thesis_agreement_figure.py
@@ -86,9 +88,10 @@ python scripts/interview_stimuli.py
 All results were produced on an AMD Ryzen 9 9955HX (16 cores) with 16 GB RAM. There, the random
 forest, XGBoost and the MLP train in minutes and the SVM in up to a few hours. The SVM's SHAP
 values are estimated by sampling and dominate the run time: its local agreement takes about 1.5
-hours (UNSW-NB15) and 7 hours (CIC-IDS2017). Global SHAP for the CIC-IDS2017 SVM is skipped by
-default (see its config); to compute it, set `skip_global_shap: false` and run it in parallel
-chunks:
+hours (UNSW-NB15) and 7 hours (CIC-IDS2017). Global SHAP for the CIC-IDS2017 SVM (about 53 hours
+in a single process) is skipped by default (see its config); without it, `explanation_report.py`
+leaves this model out of `global_top10.csv` and `global_overlap.csv` (Table 4.3). To compute it,
+set `skip_global_shap: false` and run it in parallel chunks:
 
 ```powershell
 python scripts/explain.py --experiment configs/experiments/cic_ids2017_svm_baseline.yaml --shap-chunk-size 5 --shap-n-jobs 8
@@ -113,7 +116,7 @@ correlations of the processed data.
 | --- | --- | --- | --- |
 | Raw class distributions (Figures 3.2, 3.3) | `label_distribution.py` | `outputs/plots/<dataset>/data/label_distribution_raw.png` | `dataset_inspection/<dataset>_label_distribution_raw.csv` |
 | Class distribution after preprocessing (Table 3.3) | `label_distribution.py` | `outputs/metrics/dataset_inspection/<dataset>/label_distribution_split.csv` | `dataset_inspection/<dataset>_label_distribution_split.csv` |
-| Constant and near-duplicate columns (Table A.1) | `feature_screen.py` | `outputs/metrics/dataset_inspection/<dataset>/feature_screen.csv` | `dataset_inspection/<dataset>_feature_screen.csv` |
+| Constant and near-duplicate columns among the removed columns (Table A.1) | `feature_screen.py` | `outputs/metrics/dataset_inspection/<dataset>/feature_screen.csv` | `dataset_inspection/<dataset>_feature_screen.csv` |
 | Performance (Tables 4.1, 4.2) | `train.py` | `outputs/metrics/<experiment>.json` | `metrics/` |
 | Confusion matrices (Figures 4.1-4.4) | `confusion_matrix.py` | `outputs/plots/<dataset>/<model>_baseline/performance/` | `confusion_matrices/` |
 | Global explanations (Figures 4.5-4.8) and top-10 overlap (Table 4.3) | `explain.py`, `explanation_report.py` | `outputs/plots/<dataset>/<model>_baseline/global/` | `explanation_report/global_top10.csv`, `global_overlap.csv` |
