@@ -339,7 +339,7 @@ def generate_split_distribution(
     *,
     metrics_dir: str | Path = "outputs/metrics",
 ) -> Path:
-    """Write the per-class train, test and total counts of a processed dataset (thesis Table A.2)
+    """Write the per-class train, test and total counts of a processed dataset (thesis Table 3.3)
     to metrics_dir/dataset_inspection/<dataset>/label_distribution_split.csv, one row per class,
     largest class first: class, train, test, total, share (of the total).
     """
@@ -842,7 +842,7 @@ _INTERVIEW_STIMULUS_CLASSES: dict[str, list[str]] = {
 # Test rows of the two alerts shown in the expert interviews, keyed by (dataset, model) and class.
 # The random draw in select_curated_instances depends on which rows the model classifies
 # correctly, so it moves when the model is retrained; pinning keeps the local plots on the flows
-# the experts saw (thesis Figures 4.9 and 4.10 and Appendix A.4). Both rows are correctly
+# the experts saw (thesis Figures 4.9 and 4.10 and Appendix A.3). Both rows are correctly
 # classified with a predicted probability above 0.99999; the confidence values on the interview's
 # alert cards (0.98 for DoS/DDoS and 0.95 for Brute Force) are illustrative and do not come from
 # the model.

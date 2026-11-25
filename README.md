@@ -5,7 +5,7 @@ From Model Explanations to Security Decisions* (Marco Avila, Universität Hambur
 trains four class-weighted classifiers (random forest, XGBoost, multilayer perceptron, linear SVM)
 on UNSW-NB15 and CIC-IDS2017, explains them with SHAP, LIME and permutation feature importance,
 and measures how far the explanations agree. The expert interviews (thesis Section 3.5 and
-Appendix A.4-A.6) are documented in the thesis only; this repository produces the plots that were
+Appendix A.3-A.5) are documented in the thesis only; this repository produces the plots that were
 shown in them.
 
 ## Repository layout
@@ -24,7 +24,7 @@ shown in them.
 | `src/xai_thesis/stimuli.py` | Error profiles used to choose the interview stimuli |
 | `src/xai_thesis/pipeline.py` | End-to-end steps called by the scripts |
 | `scripts/` | Command-line entry points, one per pipeline step |
-| `configs/datasets/`, `configs/experiments/` | Dataset settings and the eight model configurations, including the selected hyperparameters (Table A.3) |
+| `configs/datasets/`, `configs/experiments/` | Dataset settings and the eight model configurations, including the selected hyperparameters (Table A.2) |
 | `tests/` | Unit and integration tests |
 | `results/` | The metrics and tables reported in the thesis (see below) |
 
@@ -112,12 +112,12 @@ correlations of the processed data.
 | Thesis content | Script | Output | Copy in `results/` |
 | --- | --- | --- | --- |
 | Raw class distributions (Figures 3.2, 3.3) | `label_distribution.py` | `outputs/plots/<dataset>/data/label_distribution_raw.png` | `dataset_inspection/<dataset>_label_distribution_raw.csv` |
-| Class distribution after preprocessing (Table A.2) | `label_distribution.py` | `outputs/metrics/dataset_inspection/<dataset>/label_distribution_split.csv` | `dataset_inspection/<dataset>_label_distribution_split.csv` |
+| Class distribution after preprocessing (Table 3.3) | `label_distribution.py` | `outputs/metrics/dataset_inspection/<dataset>/label_distribution_split.csv` | `dataset_inspection/<dataset>_label_distribution_split.csv` |
 | Constant and near-duplicate columns (Table A.1) | `feature_screen.py` | `outputs/metrics/dataset_inspection/<dataset>/feature_screen.csv` | `dataset_inspection/<dataset>_feature_screen.csv` |
 | Performance (Tables 4.1, 4.2) | `train.py` | `outputs/metrics/<experiment>.json` | `metrics/` |
 | Confusion matrices (Figures 4.1-4.4) | `confusion_matrix.py` | `outputs/plots/<dataset>/<model>_baseline/performance/` | `confusion_matrices/` |
 | Global explanations (Figures 4.5-4.8) and top-10 overlap (Table 4.3) | `explain.py`, `explanation_report.py` | `outputs/plots/<dataset>/<model>_baseline/global/` | `explanation_report/global_top10.csv`, `global_overlap.csv` |
-| Local SHAP and LIME plots of the interview alerts (Figures 4.9, 4.10, Appendix A.4) | `interview_stimuli.py` | `outputs/plots/cic_ids2017/xgboost_baseline/interview/` | - |
+| Local SHAP and LIME plots of the interview alerts (Figures 4.9, 4.10, Appendix A.3) | `interview_stimuli.py` | `outputs/plots/cic_ids2017/xgboost_baseline/interview/` | - |
 | Local agreement between SHAP and LIME (Figure 4.11) | `agreement.py`, `explanation_report.py`, `thesis_agreement_figure.py` | `outputs/plots/thesis_figures/` | `explanation_report/local_agreement.csv` |
 
 The report tables are written to `outputs/metrics/explanation_report/`; `sample_sizes.csv` there

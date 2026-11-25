@@ -1,5 +1,5 @@
 """Plot the label class distribution for one or all datasets: over the processed train+test
-splits (label_distribution.png, with the per-split counts of thesis Table A.2 in
+splits (label_distribution.png, with the per-split counts of thesis Table 3.3 in
 label_distribution_split.csv) and over every raw record, after label normalization
 (label_distribution_raw.png and label_distribution_raw.csv, thesis Figures 3.2 and 3.3). The
 CSVs are written to outputs/metrics/dataset_inspection/<dataset>/."""
